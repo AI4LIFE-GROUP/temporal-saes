@@ -2,7 +2,7 @@ import os
 from nnsight import LanguageModel
 from dictionary_learning import ActivationBuffer, AutoEncoder, EvalActivationBuffer
 from dictionary_learning.trainers import StandardTrainer
-from dictionary_learning.trainers import TemporalBatchTopKTrainer, TemporalBatchTopKSAE, TemporalMatryoshkaBatchTopKTrainer, TemporalMatryoshkaBatchTopKSAE, TemporalTopicBatchTopKTrainer, TemporalTopicBatchTopKSAE
+from dictionary_learning.trainers import TemporalBatchTopKTrainer, TemporalBatchTopKSAE, TemporalMatryoshkaBatchTopKTrainer, TemporalMatryoshkaBatchTopKSAE
 from dictionary_learning.training import trainSAE
 from dictionary_learning.utils import load_dictionary, hf_dataset_to_generator, get_submodule
 from dictionary_learning.evaluation import evaluate
