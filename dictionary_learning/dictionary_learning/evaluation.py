@@ -229,8 +229,6 @@ def fft_smoothness(x, f, dictionary, cutoff_ratio=0.5):
             active_indices = (f_c.sum(0) != 0).nonzero(as_tuple=True)[0]
             f_c = f_c[:, active_indices]
 
-            t, d = f_c.shape
-
             f_c_fft = t.fft.rfft(f_c, dim=0)
             power = t.abs(f_c_fft) ** 2
 
@@ -251,7 +249,6 @@ def fft_smoothness(x, f, dictionary, cutoff_ratio=0.5):
         active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
 
         f = f[:, active_indices]
-        t, d = f.shape
         f_fft = t.fft.rfft(f, dim=0)
         power = t.abs(f_fft) ** 2
         cutoff_idx = int(cutoff_ratio * power.shape[0])
@@ -266,7 +263,6 @@ def fft_smoothness(x, f, dictionary, cutoff_ratio=0.5):
         active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
         # x = x[active_indices]
         f = f[:, active_indices]
-        t, d = f.shape
         f_fft = t.fft.rfft(f, dim=0)
         power = t.abs(f_fft) ** 2
         cutoff_idx = int(cutoff_ratio * power.shape[0])

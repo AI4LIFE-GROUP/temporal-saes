@@ -136,6 +136,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument("--checkpoints-path", type=str, help="Path to SAE checkpoints")
+    parser.add_argument("--checkpoint", type=str, help="Specific checkpoint. If none will get ae.pt from checkpoints path", default=None)
     args = parser.parse_args()
 
     device = "cuda"
@@ -184,16 +185,20 @@ if __name__ == "__main__":
 
     # OPTIONAL: specify a particular checkpoint within the checkpoints folder
     # checkpoint_path = "checkpoints/ae_16000.pt" 
-    checkpoint_path = None
+    # checkpoint_path = None
     
-    if checkpoint_path is None:
-        ae, trainer_cfg = load_dictionary(args.checkpoints_path, device=device)#, checkpoint_path=checkpoint_path)
-        ae.temporal = False
-        results_path = os.path.join(args.checkpoints_path, "eval_results.json") 
+    # if checkpoint_path is None:
+    #     ae, trainer_cfg = load_dictionary(args.checkpoints_path, device=device)#, checkpoint_path=checkpoint_path)
+    #     ae.temporal = False
+    #     results_path = os.path.join(args.checkpoints_path, "eval_results.json") 
+    # else:
+    sae_path = os.path.join(args.checkpoints_path, f"{args.run_name}/trainer_0")
+    ae, trainer_cfg = load_dictionary(sae_path, device=device, checkpoint_path=args.checkpoint)
+    ae.temporal = False
+    if args.checkpoint is not None:
+        results_path = os.path.join(sae_path, "checkpoints", args.checkpoint.split("/")[1][:-3]+"eval_results.json") 
     else:
-        ae, trainer_cfg = load_dictionary(args.checkpoints_path, device=device, checkpoint_path=checkpoint_path)
-        ae.temporal = False
-        results_path = os.path.join(args.checkpoints_path, "checkpoints", checkpoint_path.split("/")[1][:-3]+"eval_results.json") 
+        results_path = os.path.join(sae_path, "eval_results.json")
 
     print("results path:", results_path)
 
