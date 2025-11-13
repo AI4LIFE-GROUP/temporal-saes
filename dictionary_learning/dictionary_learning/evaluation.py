@@ -219,9 +219,11 @@ def lipschitz_cont(x, f, dictionary):
             min_l[0][time-1, :] = l
         return min_l[0].max(dim=0)[0].mean(), t.tensor(0), t.tensor(0)
 
-def fft_smoothness(x, f, dictionary, cutoff_ratio=0.5):
+def fft_smoothness(f, dictionary, cutoff_ratio=0.5):
     smoothnesses = {}
-    # f = f.clone().detach().cpu()
+    f = f.clone().detach().cpu()
+    f = f.to(t.float32)
+
     if type(dictionary) is TemporalMatryoshkaBatchTopKSAE or type(dictionary) is MatryoshkaBatchTopKSAE:
         f_chunks = t.split(f, dictionary.group_sizes.tolist(), dim=1)
         
@@ -274,6 +276,148 @@ def fft_smoothness(x, f, dictionary, cutoff_ratio=0.5):
         
         return smoothnesses[0], 0, 0
 
+def multiscale_smoothness(f, dictionary, scales=None, method='variance'):
+    """
+    Compute multi-scale smoothness by analyzing differences at multiple scales.
+    
+    Args:
+        f: torch.Tensor of shape [t, d] where t is time steps, d is features
+        dictionary: dictionary object (checks if Matryoshka type for partitioning)
+        scales: list of int, scales to analyze (default: [1, 2, 4, 8])
+        method: str, either 'variance' or 'gradient'
+    
+    Returns:
+        tuple of (overall_smoothness, chunk0_smoothness, chunk1_smoothness)
+    """
+    if scales is None:
+        scales = [1, 2, 4, 8]
+    
+    smoothnesses = {}
+    f = f.clone().detach().cpu()
+    f = f.to(t.float32)
+    
+    def compute_scale_ratio(matrix):
+        """Helper to compute multiscale ratio for a matrix."""
+        time_steps = matrix.shape[0]
+        scale_measures = {}
+        
+        for scale in scales:
+            if scale >= time_steps:
+                continue
+            
+            if method == 'variance':
+                diffs = matrix[scale:] - matrix[:-scale]
+                measure = diffs.var(dim=0).mean().item()
+            elif method == 'gradient':
+                diffs = t.abs(matrix[scale:] - matrix[:-scale]) / scale
+                measure = diffs.mean().item()
+            
+            scale_measures[scale] = measure
+        
+        # Compute ratio: fine-scale / coarse-scale variation
+        fine_scale = min(scales)
+        valid_scales = [s for s in scales if s < time_steps]
+        if not valid_scales:
+            return 0.0
+        coarse_scale = max(valid_scales)
+        
+        eps = 1e-10
+        ratio = scale_measures[fine_scale] / (scale_measures[coarse_scale] + eps)
+        return ratio
+
+    if type(dictionary) is TemporalMatryoshkaBatchTopKSAE or type(dictionary) is MatryoshkaBatchTopKSAE:
+        f_chunks = t.split(f, dictionary.group_sizes.tolist(), dim=1)
+        
+        for c, f_c in enumerate(f_chunks):
+            active_indices = (f_c.sum(0) != 0).nonzero(as_tuple=True)[0]
+            f_c = f_c[:, active_indices]
+            
+            smoothnesses[c] = compute_scale_ratio(f_c)
+
+        active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
+        f = f[:, active_indices]
+        
+        smoothnesses[2] = compute_scale_ratio(f)
+        
+        return smoothnesses[2], smoothnesses[0], smoothnesses[1]
+    else:
+        active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
+        f = f[:, active_indices]
+
+        smoothnesses[0] = compute_scale_ratio(f)
+        
+        return smoothnesses[0], 0, 0
+
+
+def wavelet_smoothness(f, dictionary, levels=3):
+    """
+    Compute smoothness using wavelet-inspired multi-resolution analysis.
+    
+    Args:
+        f: torch.Tensor of shape [t, d]
+        dictionary: dictionary object (checks if Matryoshka type for partitioning)
+        levels: int, number of decomposition levels
+    
+    Returns:
+        tuple of (overall_smoothness, chunk0_smoothness, chunk1_smoothness)
+    """
+    smoothnesses = {}
+    f = f.clone().detach().cpu()
+    f = f.to(t.float32)
+    
+    def compute_wavelet_ratio(matrix):
+        """Helper to compute wavelet-based smoothness for a matrix."""
+        signal = matrix.clone()
+        detail_energy = 0
+        approx_energy = 0
+        
+        for level in range(levels):
+            if signal.shape[0] < 2:
+                break
+            
+            if signal.shape[0] % 2 == 1:
+                signal = signal[:-1]
+            
+            even = signal[::2]
+            odd = signal[1::2]
+            
+            approx = (even + odd) / 2
+            detail = (even - odd) / 2
+            
+            detail_eng = (detail ** 2).sum().item()
+            detail_energy += detail_eng
+            
+            signal = approx
+        
+        approx_energy = (signal ** 2).sum().item()
+        
+        eps = 1e-10
+        ratio = detail_energy / (approx_energy + eps)
+        return ratio
+
+    if type(dictionary) is TemporalMatryoshkaBatchTopKSAE or type(dictionary) is MatryoshkaBatchTopKSAE:
+        f_chunks = t.split(f, dictionary.group_sizes.tolist(), dim=1)
+        
+        for c, f_c in enumerate(f_chunks):
+            active_indices = (f_c.sum(0) != 0).nonzero(as_tuple=True)[0]
+            f_c = f_c[:, active_indices]
+            
+            smoothnesses[c] = compute_wavelet_ratio(f_c)
+
+        active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
+        f = f[:, active_indices]        
+
+        smoothnesses[2] = compute_wavelet_ratio(f)
+        
+        return smoothnesses[2], smoothnesses[0], smoothnesses[1]
+    else:
+        active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
+        f = f[:, active_indices]
+        
+        smoothnesses[0] = compute_wavelet_ratio(f)
+
+        return smoothnesses[0], 0, 0
+
 def recon_splits(x,f,dictionary):
     if type(dictionary) is TemporalMatryoshkaBatchTopKSAE or type(dictionary) is MatryoshkaBatchTopKSAE:
         f_chunks = t.split(f, dictionary.group_sizes.tolist(), dim=1)
@@ -320,7 +464,9 @@ def evaluate(
         sequence_l0 = (f.sum(0) != 0).float().sum(dim=-1).mean() 
         sequence_smoothness_h,  sequence_smoothness_l = smoothness_tv(f, dictionary)
         sequence_lips_tot, sequence_lips_cont_h, sequence_lips_cont_l = lipschitz_cont(x, f, dictionary)
-        fft_tot, fft_h, fft_l = fft_smoothness(x, f, dictionary)
+        fft_tot, fft_h, fft_l = fft_smoothness(f, dictionary)
+        wavelet_tot, wavelet_h, wavelet_l = wavelet_smoothness(f, dictionary)
+        multiscale_tot, multiscale_h, multiscale_l = multiscale_smoothness(f, dictionary)
         features_BF = t.flatten(f, start_dim=0, end_dim=-2).to(dtype=t.float32) # If f is shape (B, L, D), flatten to (B*L, D)
         assert features_BF.shape[-1] == dictionary.dict_size
         assert len(features_BF.shape) == 2
@@ -360,9 +506,15 @@ def evaluate(
         out["lipschitz_cont_tot"] += sequence_lips_tot.item()
         out["lipschitz_cont_h"] += sequence_lips_cont_h.item()
         out["lipschitz_cont_l"] += sequence_lips_cont_l.item()
-        out["fft_tot"] += fft_tot.item()
-        out["fft_h"] += fft_h.item()
-        out["fft_l"] += fft_l.item()
+        out["fft_tot"] += fft_tot
+        out["fft_h"] += fft_h
+        out["fft_l"] += fft_l
+        out["wavelet_tot"] += wavelet_tot
+        out["wavelet_h"] += wavelet_h
+        out["wavelet_l"] += wavelet_l
+        out["multiscale_tot"] += multiscale_tot
+        out["multiscale_h"] += multiscale_h
+        out["multiscale_l"] += multiscale_l
         out["frac_variance_explained"] += frac_variance_explained.item()
         out["frac_variance_explained_high"] += fve_high.item()
         out["frac_variance_explained_low"] += fve_low.item()
