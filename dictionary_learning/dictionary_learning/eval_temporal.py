@@ -1,7 +1,7 @@
 from nnsight import LanguageModel
 from dictionary_learning import EvalActivationBuffer
 from dictionary_learning.trainers import StandardTrainer
-from dictionary_learning.trainers import TemporalBatchTopKTrainer, TemporalBatchTopKSAE, TemporalMatryoshkaBatchTopKTrainer, TemporalMatryoshkaBatchTopKSAE, TemporalTopicBatchTopKTrainer, TemporalTopicBatchTopKSAE
+from dictionary_learning.trainers import TemporalBatchTopKTrainer, TemporalBatchTopKSAE, TemporalMatryoshkaBatchTopKTrainer, TemporalMatryoshkaBatchTopKSAE
 from dictionary_learning.utils import load_dictionary, hf_dataset_to_generator, get_submodule
 from dictionary_learning.evaluation import evaluate
 from datasets import load_dataset
@@ -179,7 +179,6 @@ if __name__ == "__main__":
         "group_fractions": [0.2, 0.8],
         "group_weights": [0.2, 0.8],
         "temp_alpha": args.temp_alpha,
-        # "sparsemax": args.sparsemax, ## for topic
         "contrastive": args.contrastive,
     }
 

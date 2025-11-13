@@ -175,59 +175,7 @@ def smoothness_tv(f, dictionary):
             tv += t.abs(f[time] - f[time-1]).sum()
         return tv, t.tensor(0)
     
-def lipschitz_cont_3(x, f, dictionary):
-    min_l = {}
-    # f = f.clone().detach().cpu()
-    if type(dictionary) is TemporalMatryoshkaBatchTopKSAE or type(dictionary) is MatryoshkaBatchTopKSAE:
-        f_chunks = t.split(f, dictionary.group_sizes.tolist(), dim=1)
-        
-        for c, f_c in enumerate(f_chunks):
-            active_indices = (f_c.sum(0) != 0).nonzero(as_tuple=True)[0]
-
-            # x = x[active_indices]
-            f_c = f_c[:, active_indices]
-            min_l[c] = t.zeros((f_c.shape[0]-1, f_c.shape[1]))
-            for time in range(1, f_c.shape[0]):
-                f_norm = t.linalg.vector_norm(f_c[time], ord=1)
-                f_norm_prev = t.linalg.vector_norm(f_c[time-1], ord=1)
-                f_change = t.abs(f_c[time]/f_norm - f_c[time-1]/f_norm_prev)
-                # x_change = t.linalg.vector_norm(x[time] - x[time-1], ord=2)
-
-                l = f_change# / x_change
-
-                min_l[c][time-1, :] = l
-
-        active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
-        # x = x[active_indices]
-        f = f[:, active_indices]
-        min_l[2] = t.zeros((f.shape[0]-1, f.shape[1]))
-
-        for time in range(1, f.shape[0]):
-            f_norm = t.linalg.vector_norm(f[time], ord=1)
-            f_norm_prev = t.linalg.vector_norm(f[time-1], ord=1)
-            f_change = t.abs(f[time]/f_norm - f[time-1]/f_norm_prev)
-            # f_change = t.abs(f[time] - f[time-1])
-            # x_change = t.linalg.vector_norm(x[time] - x[time-1], ord=2)
-            l = f_change# / x_change
-            min_l[2][time-1, :] = l
-        return min_l[2].max(dim=0)[0].mean(), min_l[0].max(dim=0)[0].mean(), min_l[1].max(dim=0)[0].mean()
-    else:
-        active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
-        # x = x[active_indices]
-        f = f[:, active_indices]
-        min_l[0] = t.zeros((f.shape[0]-1, f.shape[1]))
-
-        for time in range(1, f.shape[0]):
-            f_norm = t.linalg.vector_norm(f[time], ord=1)
-            f_norm_prev = t.linalg.vector_norm(f[time-1], ord=1)
-            f_change = t.abs(f[time]/f_norm - f[time-1]/f_norm_prev)
-            # f_change = t.abs(f[time] - f[time-1])
-            # x_change = t.linalg.vector_norm(x[time] - x[time-1], ord=2)
-            l = f_change# / x_change
-            min_l[0][time-1, :] = l
-        return min_l[0].max(dim=0)[0].mean(), t.tensor(0), t.tensor(0)
-    
-def lipschitz_cont_final(x, f, dictionary):
+def lipschitz_cont(x, f, dictionary):
     min_l = {}
     # f = f.clone().detach().cpu()
     if type(dictionary) is TemporalMatryoshkaBatchTopKSAE or type(dictionary) is MatryoshkaBatchTopKSAE:
@@ -271,39 +219,64 @@ def lipschitz_cont_final(x, f, dictionary):
             min_l[0][time-1, :] = l
         return min_l[0].max(dim=0)[0].mean(), t.tensor(0), t.tensor(0)
 
-def lipschitz_cont(x, f, dictionary):
-    min_l = {}
-
+def fft_smoothness(x, f, dictionary, cutoff_ratio=0.5):
+    smoothnesses = {}
+    # f = f.clone().detach().cpu()
     if type(dictionary) is TemporalMatryoshkaBatchTopKSAE or type(dictionary) is MatryoshkaBatchTopKSAE:
         f_chunks = t.split(f, dictionary.group_sizes.tolist(), dim=1)
-        for time in range(1, f.shape[0]):
-            for c, f_c in enumerate(f_chunks):
-                f_change = t.linalg.vector_norm(f_c[time] - f_c[time-1], ord=2)
-                x_change = t.linalg.vector_norm(x[time] - x[time-1], ord=2)
-                l = f_change / x_change
+        
+        for c, f_c in enumerate(f_chunks):
+            active_indices = (f_c.sum(0) != 0).nonzero(as_tuple=True)[0]
+            f_c = f_c[:, active_indices]
 
-                i = 0 if c < 1 else 1
-                if i in min_l:
-                    min_l[i] = max(min_l[i], l)
-                else:
-                    min_l[i] = l
-        min_l[2] = 0
-        for time in range(1, f.shape[0]):
+            t, d = f_c.shape
+
+            f_c_fft = t.fft.rfft(f_c, dim=0)
+            power = t.abs(f_c_fft) ** 2
+
+            # Define cutoff frequency index
+            cutoff_idx = int(cutoff_ratio * power.shape[0])
             
-            f_change = t.linalg.vector_norm(f[time] - f[time-1], ord=2)
-            x_change = t.linalg.vector_norm(x[time] - x[time-1], ord=2)
-            l = f_change / x_change
-            min_l[2] = max(min_l[2], l)
-        return min_l[2], min_l[0], min_l[1]
+            # Split into low and high frequency components
+            low_freq_energy = power[:cutoff_idx].sum(dim=0)
+            high_freq_energy = power[cutoff_idx:].sum(dim=0)
+            
+            # Compute ratio for each feature (add small epsilon to avoid division by zero)
+            eps = 1e-10
+            ratio = high_freq_energy / (low_freq_energy + eps)
+            
+            # Average across features
+            smoothnesses[c] = ratio.mean().item()
+
+        active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
+
+        f = f[:, active_indices]
+        t, d = f.shape
+        f_fft = t.fft.rfft(f, dim=0)
+        power = t.abs(f_fft) ** 2
+        cutoff_idx = int(cutoff_ratio * power.shape[0])
+        low_freq_energy = power[:cutoff_idx].sum(dim=0)
+        high_freq_energy = power[cutoff_idx:].sum(dim=0)
+        eps = 1e-10
+        ratio = high_freq_energy / (low_freq_energy + eps)
+        smoothnesses[2] = ratio.mean().item()
+        
+        return smoothnesses[2], smoothnesses[0], smoothnesses[1]
     else:
-        min_l[0] = 0
-        for time in range(1, f.shape[0]):
-            
-            f_change = t.linalg.vector_norm(f[time] - f[time-1], ord=2)
-            x_change = t.linalg.vector_norm(x[time] - x[time-1], ord=2)
-            l = f_change / x_change
-            min_l[0] = max(min_l[0], l)
-        return min_l[0], t.tensor(0), t.tensor(0)
+        active_indices = (f.sum(0) != 0).nonzero(as_tuple=True)[0]
+        # x = x[active_indices]
+        f = f[:, active_indices]
+        t, d = f.shape
+        f_fft = t.fft.rfft(f, dim=0)
+        power = t.abs(f_fft) ** 2
+        cutoff_idx = int(cutoff_ratio * power.shape[0])
+        low_freq_energy = power[:cutoff_idx].sum(dim=0)
+        high_freq_energy = power[cutoff_idx:].sum(dim=0)
+        eps = 1e-10
+        ratio = high_freq_energy / (low_freq_energy + eps)
+        smoothnesses[0] = ratio.mean().item()
+        
+        return smoothnesses[0], 0, 0
 
 def recon_splits(x,f,dictionary):
     if type(dictionary) is TemporalMatryoshkaBatchTopKSAE or type(dictionary) is MatryoshkaBatchTopKSAE:
@@ -350,8 +323,8 @@ def evaluate(
         l0 = (f != 0).float().sum(dim=-1).mean()
         sequence_l0 = (f.sum(0) != 0).float().sum(dim=-1).mean() 
         sequence_smoothness_h,  sequence_smoothness_l = smoothness_tv(f, dictionary)
-        # sequence_lips_tot, sequence_lips_cont_h, sequence_lips_cont_l = lipschitz_cont(x, f, dictionary)
-        sequence_lips_tot, sequence_lips_cont_h, sequence_lips_cont_l = lipschitz_cont_final(x, f, dictionary)
+        sequence_lips_tot, sequence_lips_cont_h, sequence_lips_cont_l = lipschitz_cont(x, f, dictionary)
+        fft_tot, fft_h, fft_l = fft_smoothness(x, f, dictionary)
         features_BF = t.flatten(f, start_dim=0, end_dim=-2).to(dtype=t.float32) # If f is shape (B, L, D), flatten to (B*L, D)
         assert features_BF.shape[-1] == dictionary.dict_size
         assert len(features_BF.shape) == 2
@@ -391,6 +364,9 @@ def evaluate(
         out["lipschitz_cont_tot"] += sequence_lips_tot.item()
         out["lipschitz_cont_h"] += sequence_lips_cont_h.item()
         out["lipschitz_cont_l"] += sequence_lips_cont_l.item()
+        out["fft_tot"] += fft_tot.item()
+        out["fft_h"] += fft_h.item()
+        out["fft_l"] += fft_l.item()
         out["frac_variance_explained"] += frac_variance_explained.item()
         out["frac_variance_explained_high"] += fve_high.item()
         out["frac_variance_explained_low"] += fve_low.item()

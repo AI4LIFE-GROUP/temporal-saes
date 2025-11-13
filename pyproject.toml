@@ -29,6 +29,7 @@ python-dotenv = "^1.1.1"
 matplotlib = "^3.10.7"
 seaborn = "^0.13.2"
 plotly = "^6.3.1"
+transformers = "^4.57.1"
 
 [[tool.poetry.source]]
 name = "torch"

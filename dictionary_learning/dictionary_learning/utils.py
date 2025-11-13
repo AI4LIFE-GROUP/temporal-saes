@@ -88,10 +88,6 @@ def load_dictionary(base_path: str, device: str, checkpoint_path=None) -> tuple:
         k = config["trainer"]["k"]
         temporal = config["trainer"]["temporal"]
         dictionary = TemporalMatryoshkaBatchTopKSAE.from_pretrained(ae_path, k=k, temporal=temporal, device=device)
-    elif dict_class == "TemporalTopicBatchTopKSAE":
-        k = config["trainer"]["k"]
-        temporal = config["trainer"]["temporal"]
-        dictionary = TemporalTopicBatchTopKSAE.from_pretrained(ae_path, k=k, temporal=temporal, device=device)
     elif dict_class == "JumpReluAutoEncoder":
         dictionary = JumpReluAutoEncoder.from_pretrained(ae_path, device=device)
     else:

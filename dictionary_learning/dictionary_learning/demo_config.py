@@ -36,7 +36,6 @@ class TrainerType(Enum):
     JUMP_RELU = "jump_relu"
     Matryoshka_BATCH_TOP_K = "matryoshka_batch_top_k"
     TemporalMatryoshka_BATCH_TOP_K = "temporal_matryoshka_batch_top_k"
-    TemporalTopic_BATCH_TOP_K = "temporal_topic_batch_top_k"
 
 
 @dataclass
@@ -194,28 +193,6 @@ class TemporalMatryoshkaBatchTopKTrainerConfig(BaseTrainerConfig):
     auxk_alpha: float = 1 / 32
     threshold_beta: float = 0.999
     threshold_start_step: int = 1000  # when to begin tracking the average threshold
-
-@dataclass
-class TemporalTopicBatchTopKTrainerConfig(BaseTrainerConfig):
-    dict_size: int
-    seed: int
-    lr: float
-    k: int
-    group_fractions: list[float] = field(
-        default_factory=lambda: [
-            (1 / 32),
-            (1 / 16),
-            (1 / 8),
-            (1 / 4),
-            ((1 / 2) + (1 / 32)),
-        ]
-    )
-    group_weights: Optional[list[float]] = None
-    auxk_alpha: float = 1 / 32
-    threshold_beta: float = 0.999
-    threshold_start_step: int = 1000  # when to begin tracking the average threshold
-    sparsemax: bool = False
-
 
 @dataclass
 class GatedTrainerConfig(BaseTrainerConfig):

@@ -193,7 +193,6 @@ if __name__ == "__main__":
         "group_fractions": [0.2, 0.8],
         "group_weights": [0.2, 0.8],
         "temp_alpha": args.temp_alpha,
-        # "sparsemax": args.sparsemax, ## for topic
         "contrastive": args.contrastive,
         # "l1_penalty": args.mu,
         # "dict_class_kwargs": {

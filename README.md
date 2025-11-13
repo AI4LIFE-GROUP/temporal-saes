@@ -67,5 +67,6 @@ Example:
  ```
  python src/experiments/alignment_study.py --run_name "sae_run_name" --chunk 0 --checkpoints_path "path/to/checkpoints" --explanation_path "path/to/explanations.json"
  ```
+ 
  ## Steering
  (Under construction!)
