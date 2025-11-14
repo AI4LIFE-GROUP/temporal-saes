@@ -1,10 +1,11 @@
 # Temporal Sparse Autoencoders: Leveraging the Sequential Nature of Language for Interpretability. 
 
 # Table of Contents
- 1. Installation
- 2. Codebase Structure
- 3. Training a TSAE
- 4. Replicating Experiments
+ 1. [Installation](#Installation)
+ 2. [Codebase Structure](#Codebase-Structure)
+ 3. [Training a T-SAE](#Training-a-T-SAE)
+ 4. [Loading From HuggingFace](#Loading-From-HuggingFace)
+ 5. [Replicating Experiments](#Replicating-Experiments)
 
 # Installation
 This project uses Poetry for package management. To install, simply install Poetry and run
